@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agua Segura · Simulador EDO</title>
+  <meta name="description" content="Simulación de la purificación por dilución de un reservorio comunitario con Heun, RK4 y solución analítica.">
+  <link rel="stylesheet" href="../static/css/styles.css">
+</head>
+<body>
+  <header class="cabecera">
+    <div class="contenedor">
+      <p class="sobretitulo">Desafío EDO · Métodos Numéricos</p>
+      <h1>¿Cuándo es seguro beber el agua del tanque comunitario?</h1>
+      <p class="bajada">Un tanque de distribución de una comunidad rural amaneció contaminado. Se renueva con agua pura y sale la mezcla al mismo caudal. El modelo estima <strong>en cuántas horas</strong> la concentración baja al nivel objetivo y compara qué tan precisos son Heun y RK4 frente a la solución exacta.</p>
+    </div>
+  </header>
+
+  <main class="contenedor">
+    <section class="resultado" aria-live="polite" aria-labelledby="titulo-respuesta">
+      <div class="respuesta">
+        <h2 id="titulo-respuesta">Respuesta a la pregunta comunitaria</h2>
+        <p class="cifra" id="cifra-tiempo">—</p>
+        <p class="cifra-nota" id="cifra-nota"></p>
+      </div>
+      <dl class="indicadores">
+        <div><dt>Heun: t al umbral</dt><dd id="ind-heun">—</dd></div>
+        <div><dt>RK4: t al umbral</dt><dd id="ind-rk4">—</dd></div>
+        <div><dt>Error máx. Heun</dt><dd id="ind-err-heun">—</dd></div>
+        <div><dt>Error máx. RK4</dt><dd id="ind-err-rk4">—</dd></div>
+      </dl>
+    </section>
+
+    <div class="panel-principal">
+      <form class="tarjeta controles" id="formulario" novalidate aria-labelledby="titulo-parametros">
+        <h2 id="titulo-parametros">Datos del problema</h2>
+        <p class="ayuda">Escriba los valores: los cálculos se actualizan al teclear. Admite coma o punto decimal. Son datos hipotéticos, no mediciones de un tanque real.</p>
+
+        <div class="rejilla-campos">
+        <div class="campo" data-campo="volumen">
+          <label for="volumen">Volumen V <span>L</span></label>
+          <input type="text" inputmode="decimal" autocomplete="off" spellcheck="false" id="volumen" value="1000">
+          <p class="error" role="alert"></p>
+        </div>
+        <div class="campo" data-campo="caudal">
+          <label for="caudal">Caudal Q <span>L/h</span></label>
+          <input type="text" inputmode="decimal" autocomplete="off" spellcheck="false" id="caudal" value="100">
+          <p class="error" role="alert"></p>
+        </div>
+        </div>
+        <div class="campo" data-campo="k">
+          <label for="k">Tasa de dilución k = Q/V <span>h⁻¹</span></label>
+          <input type="text" inputmode="decimal" autocomplete="off" spellcheck="false" id="k" value="0.1">
+          <p class="ayuda">Si escribe k, se ajusta Q con el volumen actual.</p>
+          <p class="error" role="alert"></p>
+        </div>
+
+        <div class="rejilla-campos">
+        <div class="campo" data-campo="c0">
+          <label for="c0">C₀ inicial <span>mg/L</span></label>
+          <input type="text" inputmode="decimal" autocomplete="off" spellcheck="false" id="c0" value="50">
+          <p class="error" role="alert"></p>
+        </div>
+        <div class="campo" data-campo="cSegura">
+          <label for="cSegura">C segura <span>mg/L</span></label>
+          <input type="text" inputmode="decimal" autocomplete="off" spellcheck="false" id="cSegura" value="5">
+          <p class="error" role="alert"></p>
+        </div>
+        </div>
+        <div class="rejilla-campos">
+        <div class="campo" data-campo="tFinal">
+          <label for="tFinal">Tiempo T <span>h</span></label>
+          <input type="text" inputmode="decimal" autocomplete="off" spellcheck="false" id="tFinal" value="48">
+          <p class="error" role="alert"></p>
+        </div>
+        <div class="campo" data-campo="h">
+          <label for="h">Paso h <span>h</span></label>
+          <input type="text" inputmode="decimal" autocomplete="off" spellcheck="false" id="h" value="1">
+          <p class="error" role="alert"></p>
+        </div>
+        </div>
+        <div class="pastillas" id="pastillas-h" role="group" aria-label="Pasos frecuentes">
+          <button type="button" data-h="2">2</button>
+          <button type="button" data-h="1" class="activa">1</button>
+          <button type="button" data-h="0.5">0.5</button>
+          <button type="button" data-h="0.25">0.25</button>
+          <button type="button" data-h="0.1">0.1</button>
+        </div>
+
+        <h3>Reporte</h3>
+        <label class="etiqueta-campo" for="titulo-reporte">Título <span>opcional</span></label>
+        <input type="text" id="titulo-reporte" maxlength="120" autocomplete="off" placeholder="Ej.: Tanque norte, ensayo 1">
+        <label class="etiqueta-campo" for="notas-reporte">Notas <span>opcional</span></label>
+        <textarea id="notas-reporte" rows="2" maxlength="2000"></textarea>
+        <div class="acciones-form">
+          <button type="button" class="boton-primario" id="generar-reporte">Generar reporte</button>
+          <button type="button" class="boton-secundario" id="restablecer">Caso base</button>
+        </div>
+      </form>
+
+      <div class="columna-graficos">
+        <section class="tarjeta" aria-labelledby="titulo-grafico">
+          <h2 id="titulo-grafico">Concentración en el tanque</h2>
+          <div class="lienzo"><canvas id="grafico-concentracion" role="img" aria-label="Concentración frente al tiempo: analítica, Heun y RK4, con el umbral seguro."></canvas></div>
+        </section>
+        <section class="tarjeta" aria-labelledby="titulo-error">
+          <h2 id="titulo-error">Error absoluto frente a la analítica <small>(escala logarítmica)</small></h2>
+          <div class="lienzo lienzo-bajo"><canvas id="grafico-error" role="img" aria-label="Error absoluto de Heun y RK4 frente al tiempo en escala logarítmica."></canvas></div>
+        </section>
+      </div>
+    </div>
+
+    <section class="tarjeta interpretacion" aria-labelledby="titulo-interpretacion">
+      <h2 id="titulo-interpretacion">Interpretación automática</h2>
+      <div id="interpretacion"></div>
+      <div id="aviso-estabilidad" class="aviso" hidden role="status"></div>
+    </section>
+
+    <section class="tarjeta" aria-labelledby="titulo-bitacora">
+      <div class="titulo-con-accion">
+        <h2 id="titulo-bitacora">Bitácora de reportes</h2>
+        <div class="acciones-form">
+          <button type="button" class="boton-secundario" id="exportar-bitacora">Exportar JSON</button>
+          <button type="button" class="boton-secundario" id="importar-bitacora">Importar JSON</button>
+          <button type="button" class="boton-secundario" id="vaciar-bitacora">Vaciar</button>
+          <input type="file" id="archivo-bitacora" accept=".json,application/json" hidden>
+        </div>
+      </div>
+      <p class="ayuda">Los reportes quedan en la caché de este navegador. Exporte el archivo para compartir la bitácora o recuperarla en otro equipo; borrar los datos del sitio borra también esta caché.</p>
+      <p class="estado-bitacora" id="estado-bitacora" role="status" hidden></p>
+      <p class="vacio" id="bitacora-vacia">Aún no hay reportes. Escriba los datos y pulse <b>Generar reporte</b>, o importe una bitácora.</p>
+      <div id="contenedor-bitacora" hidden>
+        <div class="barra-busqueda">
+          <input type="search" id="buscar-bitacora" placeholder="Buscar por título, notas o fecha" aria-label="Buscar en la bitácora">
+          <span class="ayuda" id="contador-bitacora"></span>
+        </div>
+        <div class="tabla-scroll alta" tabindex="0" role="region" aria-labelledby="titulo-bitacora">
+          <table class="tabla-bitacora">
+            <thead><tr><th>Fecha</th><th>Título</th><th>C₀ [mg/L]</th><th>k [h⁻¹]</th><th>h [h]</th><th>t* [h]</th><th>E máx. RK4</th><th>Acciones</th></tr></thead>
+            <tbody id="lista-bitacora"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="tarjeta" aria-labelledby="titulo-comparacion">
+      <h2 id="titulo-comparacion">Comparación de tamaños de paso</h2>
+      <p class="ayuda">h₁ = 1 h y h₂ = 0.25 h siempre están presentes; se añade el h elegido si es distinto. Reducir h a la cuarta parte divide el error de Heun por cerca de 4² = 16 y el de RK4 por cerca de 4⁴ = 256.</p>
+      <div class="tabla-scroll" tabindex="0" role="region" aria-labelledby="titulo-comparacion">
+        <table id="tabla-comparacion">
+          <thead>
+            <tr><th>h [h]</th><th>Pasos</th><th>E máx. Heun [mg/L]</th><th>E máx. RK4 [mg/L]</th><th>E % final Heun</th><th>E % final RK4</th><th>t* Heun [h]</th><th>t* RK4 [h]</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="tarjeta" aria-labelledby="titulo-tabla">
+      <div class="titulo-con-accion">
+        <h2 id="titulo-tabla">Tabla paso a paso</h2>
+        <button type="button" class="boton-secundario" id="descargar-csv">Descargar CSV</button>
+      </div>
+      <div class="tabla-scroll alta" tabindex="0" role="region" aria-labelledby="titulo-tabla">
+        <table id="tabla-pasos">
+          <thead>
+            <tr><th>t [h]</th><th>C exacta [mg/L]</th><th>C Heun</th><th>C RK4</th><th>E abs Heun</th><th>E abs RK4</th><th>E % Heun</th><th>E % RK4</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="paginador">
+        <button type="button" class="boton-secundario" id="pagina-anterior">Anterior</button>
+        <span id="pagina-info"></span>
+        <button type="button" class="boton-secundario" id="pagina-siguiente">Siguiente</button>
+      </div>
+    </section>
+
+    <section class="tarjeta explicacion" aria-labelledby="titulo-modelo">
+      <h2 id="titulo-modelo">El modelo y su justificación</h2>
+      <div class="dos-columnas">
+        <div>
+          <h3>Variables, parámetros y unidades</h3>
+          <ul>
+            <li><b>C(t)</b>: concentración del contaminante [mg/L], variable dependiente.</li>
+            <li><b>t</b>: tiempo [h], variable independiente.</li>
+            <li><b>V</b> = 1000 L: volumen constante del tanque.</li>
+            <li><b>Q</b> = 100 L/h: caudal de entrada y de salida.</li>
+            <li><b>k</b> = Q/V = 0.1 h⁻¹: tasa de dilución.</li>
+            <li><b>C₀</b> = 50 mg/L y umbral seguro de 5 mg/L, ambos hipotéticos.</li>
+          </ul>
+          <h3>Supuestos</h3>
+          <ul>
+            <li>Mezcla instantánea y homogénea en todo el tanque.</li>
+            <li>El agua de entrada no contiene el contaminante.</li>
+            <li>Contaminante conservativo: sólo sale por el flujo, sin reacción ni sedimentación.</li>
+            <li>Caudal y volumen constantes durante toda la simulación.</li>
+          </ul>
+        </div>
+        <div>
+          <h3>Solución exacta, paso a paso</h3>
+          <ol class="demostracion">
+            <li>Balance de masa con entrada pura: <span class="formula">V·dC/dt = Q·0 − Q·C</span>, es decir <span class="formula">dC/dt = −k·C</span> con <span class="formula">C(0) = C₀</span>.</li>
+            <li>Separar variables (C &gt; 0): <span class="formula">dC/C = −k dt</span>.</li>
+            <li>Integrar: <span class="formula">ln C = −k·t + A</span>, luego <span class="formula">C(t) = e<sup>A</sup>·e<sup>−k·t</sup></span>.</li>
+            <li>Con la condición inicial, <span class="formula">e<sup>A</sup> = C₀</span>, así que <span class="formula">C(t) = C₀·e<sup>−k·t</sup></span>.</li>
+            <li>Comprobación por sustitución: <span class="formula">C′(t) = −k·C₀·e<sup>−k·t</sup> = −k·C(t)</span> ✓ y <span class="formula">C(0) = C₀·e⁰ = C₀</span> ✓.</li>
+            <li>Tiempo al umbral: <span class="formula">C(t*) = C<sub>s</sub></span> da <span class="formula">t* = ln(C₀/C<sub>s</sub>)/k</span>.</li>
+          </ol>
+        </div>
+      </div>
+      <div class="dos-columnas">
+        <div>
+          <h3>Heun (RK2 predictor-corrector)</h3>
+          <p class="formula bloque">C* = Cᵢ + h·f(tᵢ, Cᵢ)<br>Cᵢ₊₁ = Cᵢ + (h/2)·[f(tᵢ, Cᵢ) + f(tᵢ₊₁, C*)]</p>
+          <p>Error global proporcional a h².</p>
+        </div>
+        <div>
+          <h3>Runge-Kutta de orden 4</h3>
+          <p class="formula bloque">k₁ = f(tᵢ, Cᵢ); k₂ = f(tᵢ+h/2, Cᵢ+h·k₁/2)<br>k₃ = f(tᵢ+h/2, Cᵢ+h·k₂/2); k₄ = f(tᵢ+h, Cᵢ+h·k₃)<br>Cᵢ₊₁ = Cᵢ + (h/6)·(k₁+2k₂+2k₃+k₄)</p>
+          <p>Error global proporcional a h⁴.</p>
+        </div>
+      </div>
+      <h3>Limitaciones</h3>
+      <p>Es una simulación educativa con parámetros supuestos, no una predicción comprobada ni una autorización para consumo. Un tanque real tiene zonas mal mezcladas y el contaminante puede reaccionar o sedimentar; decidir que el agua es potable exige análisis de laboratorio. El método numérico sólo reduce el error de cálculo: no corrige los errores del modelo.</p>
+    </section>
+  </main>
+
+  <footer class="pie contenedor">Métodos Numéricos · Datos sintéticos con fines educativos</footer>
+
+  <button type="button" class="burbuja" id="burbuja-estudiantes" aria-haspopup="dialog" aria-label="Ver datos del estudiante y del proyecto">
+    <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M12 3 1 9l11 6 9-4.9V17h2V9L12 3zM5 13.2V17c0 1.7 3.1 3.5 7 3.5s7-1.8 7-3.5v-3.8l-7 3.8-7-3.8z"/></svg>
+  </button>
+
+  <dialog class="modal modal-reporte" id="modal-reporte" aria-label="Reporte de simulación">
+    <div class="barra-reporte">
+      <button type="button" class="boton-primario" id="reporte-imprimir">Imprimir o guardar PDF</button>
+      <button type="button" class="boton-secundario" id="reporte-json">JSON</button>
+      <button type="button" class="boton-secundario" id="reporte-csv">CSV</button>
+      <button type="button" class="boton-secundario" id="reporte-cargar">Cargar datos</button>
+      <button type="button" class="boton-secundario" id="reporte-eliminar">Eliminar</button>
+      <button type="button" class="modal-cerrar" id="reporte-cerrar" aria-label="Cerrar">×</button>
+    </div>
+    <article class="hoja" id="hoja-reporte"></article>
+  </dialog>
+
+  <dialog class="modal" id="modal-estudiantes" aria-labelledby="modal-titulo">
+    <div class="modal-cabecera">
+      <p class="sobretitulo">Métodos Numéricos</p>
+      <h2 id="modal-titulo">Agua Segura: purificación de un reservorio comunitario</h2>
+      <button type="button" class="modal-cerrar" id="modal-cerrar" aria-label="Cerrar">×</button>
+    </div>
+    <div class="modal-cuerpo">
+      <p class="modal-etiqueta">Desafío individual · EDO de primer orden · Heun, RK4 y solución analítica</p>
+      <ul class="lista-estudiantes" id="lista-estudiantes"></ul>
+    </div>
+  </dialog>
+
+  <script src="../static/vendor/chart.umd.js"></script>
+  <script src="../static/js/numerics.js"></script>
+  <script src="../static/js/bitacora.js"></script>
+  <script src="../static/js/app.js"></script>
+  <script src="../static/js/ui-bitacora.js"></script>
+  <script src="../static/js/estudiantes.js"></script>
+</body>
+</html>
